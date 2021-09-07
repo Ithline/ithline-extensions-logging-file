@@ -18,7 +18,7 @@ namespace Ithline.Extensions.Logging.File
             private readonly string _fileNamePrefix;
             private readonly string _fileNameSuffix;
             private readonly string _format;
-            private StreamWriter _writer;
+            private StreamWriter? _writer;
             private DateTime? _checkpoint;
 
             public Rolling(string filePath, FileRollingInterval rollingInterval, int maxRollingFiles)
@@ -62,7 +62,7 @@ namespace Ithline.Extensions.Logging.File
                     return;
                 }
 
-                List<(string filePath, DateTime expiration)> matchedFiles = null;
+                List<(string filePath, DateTime expiration)>? matchedFiles = null;
                 foreach (var filePath in Directory.EnumerateFiles(_directoryPath))
                 {
                     var fileName = Path.GetFileName(filePath);
@@ -76,7 +76,7 @@ namespace Ithline.Extensions.Logging.File
 
                         if (DateTime.TryParseExact(match.Groups[1].Value, _format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var expiration))
                         {
-                            matchedFiles = matchedFiles ?? new List<(string filePath, DateTime expiration)>();
+                            matchedFiles ??= new List<(string filePath, DateTime expiration)>();
                             matchedFiles.Add((filePath, expiration));
                         }
                     }
@@ -120,37 +120,27 @@ namespace Ithline.Extensions.Logging.File
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static string ResolveFormat(FileRollingInterval rollingInterval)
             {
-                switch (rollingInterval)
+                return rollingInterval switch
                 {
-                    case FileRollingInterval.Year:
-                        return "yyyy";
-                    case FileRollingInterval.Month:
-                        return "yyyyMM";
-                    case FileRollingInterval.Day:
-                        return "yyyyMMdd";
-                    case FileRollingInterval.Hour:
-                        return "yyyyMMddHH";
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(rollingInterval));
-                }
+                    FileRollingInterval.Year => "yyyy",
+                    FileRollingInterval.Month => "yyyyMM",
+                    FileRollingInterval.Day => "yyyyMMdd",
+                    FileRollingInterval.Hour => "yyyyMMddHH",
+                    _ => throw new ArgumentOutOfRangeException(nameof(rollingInterval)),
+                };
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static DateTime ResolveCheckpoint(FileRollingInterval rollingInterval, DateTime instant)
             {
-                switch (rollingInterval)
+                return rollingInterval switch
                 {
-                    case FileRollingInterval.Year:
-                        return new DateTime(instant.Year, 1, 1, 0, 0, 0, instant.Kind).AddYears(1);
-                    case FileRollingInterval.Month:
-                        return new DateTime(instant.Year, instant.Month, 1, 0, 0, 0, instant.Kind).AddMonths(1);
-                    case FileRollingInterval.Day:
-                        return new DateTime(instant.Year, instant.Month, instant.Day, 0, 0, 0, instant.Kind).AddDays(1);
-                    case FileRollingInterval.Hour:
-                        return new DateTime(instant.Year, instant.Month, instant.Day, instant.Hour, 0, 0, instant.Kind).AddHours(1);
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(rollingInterval));
-                }
+                    FileRollingInterval.Year => new DateTime(instant.Year, 1, 1, 0, 0, 0, instant.Kind).AddYears(1),
+                    FileRollingInterval.Month => new DateTime(instant.Year, instant.Month, 1, 0, 0, 0, instant.Kind).AddMonths(1),
+                    FileRollingInterval.Day => new DateTime(instant.Year, instant.Month, instant.Day, 0, 0, 0, instant.Kind).AddDays(1),
+                    FileRollingInterval.Hour => new DateTime(instant.Year, instant.Month, instant.Day, instant.Hour, 0, 0, instant.Kind).AddHours(1),
+                    _ => throw new ArgumentOutOfRangeException(nameof(rollingInterval)),
+                };
             }
         }
     }

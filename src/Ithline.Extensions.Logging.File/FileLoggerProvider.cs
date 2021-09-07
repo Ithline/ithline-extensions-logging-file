@@ -13,7 +13,7 @@ namespace Ithline.Extensions.Logging.File
     {
         private readonly ConcurrentDictionary<string, FileLogger> _loggers;
         private readonly ThreadingFileLoggerProcessor _processor;
-        private IExternalScopeProvider _scopeProvider;
+        private IExternalScopeProvider? _scopeProvider;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FileLoggerProvider"/> with the specified options.
@@ -50,7 +50,7 @@ namespace Ithline.Extensions.Logging.File
         }
 
         /// <inheritdoc/>
-        public void SetScopeProvider(IExternalScopeProvider scopeProvider)
+        public void SetScopeProvider(IExternalScopeProvider? scopeProvider)
         {
             _scopeProvider = scopeProvider;
             foreach (var logger in _loggers)

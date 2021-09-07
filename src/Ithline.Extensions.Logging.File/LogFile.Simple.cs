@@ -8,7 +8,7 @@ namespace Ithline.Extensions.Logging.File
         private sealed class Simple : LogFile
         {
             private readonly string _filePath;
-            private StreamWriter _writer;
+            private StreamWriter? _writer;
 
             public Simple(string filePath)
             {
@@ -17,12 +17,13 @@ namespace Ithline.Extensions.Logging.File
 
             protected override TextWriter ResolveWriter(DateTime instant)
             {
-                if (_writer is null)
+                if (_writer is not null)
                 {
-                    var fs = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
-                    _writer = new StreamWriter(fs, encoding: _utf8);
+                    return _writer;
                 }
-                return _writer;
+
+                var fs = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+                return _writer = new StreamWriter(fs, encoding: _utf8);
             }
 
             protected override void Dispose(bool disposing)
