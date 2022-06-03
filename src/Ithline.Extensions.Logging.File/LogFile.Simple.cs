@@ -1,37 +1,36 @@
 using System;
 using System.IO;
 
-namespace Ithline.Extensions.Logging.File
+namespace Ithline.Extensions.Logging.File;
+
+internal partial class LogFile
 {
-    internal partial class LogFile
+    private sealed class Simple : LogFile
     {
-        private sealed class Simple : LogFile
+        private readonly string _filePath;
+        private StreamWriter? _writer;
+
+        public Simple(string filePath)
         {
-            private readonly string _filePath;
-            private StreamWriter? _writer;
+            _filePath = filePath;
+        }
 
-            public Simple(string filePath)
+        protected override TextWriter ResolveWriter(DateTime instant)
+        {
+            if (_writer is not null)
             {
-                _filePath = filePath;
+                return _writer;
             }
 
-            protected override TextWriter ResolveWriter(DateTime instant)
-            {
-                if (_writer is not null)
-                {
-                    return _writer;
-                }
+            var fs = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+            return _writer = new StreamWriter(fs, encoding: _utf8);
+        }
 
-                var fs = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
-                return _writer = new StreamWriter(fs, encoding: _utf8);
-            }
-
-            protected override void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
             {
-                if (disposing)
-                {
-                    _writer?.Dispose();
-                }
+                _writer?.Dispose();
             }
         }
     }

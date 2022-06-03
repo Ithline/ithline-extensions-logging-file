@@ -5,140 +5,139 @@ using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace Ithline.Extensions.Logging.File
+namespace Ithline.Extensions.Logging.File;
+
+internal sealed class FileLogger : ILogger
 {
-    internal sealed class FileLogger : ILogger
+    [ThreadStatic]
+    private static StringBuilder? _stringBuilder;
+    private readonly FileLoggerProcessor _processor;
+    private readonly string _category;
+
+    public FileLogger(string category, FileLoggerProcessor processor)
     {
-        [ThreadStatic]
-        private static StringBuilder? _stringBuilder;
-        private readonly FileLoggerProcessor _processor;
-        private readonly string _category;
+        _category = category;
+        _processor = processor;
+    }
 
-        public FileLogger(string category, FileLoggerProcessor processor)
+    internal IExternalScopeProvider? ScopeProvider { get; set; }
+
+    public IDisposable BeginScope<TState>(TState state) => ScopeProvider?.Push(state) ?? NullScope.Instance;
+
+    public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        if (!this.IsEnabled(logLevel))
         {
-            _category = category;
-            _processor = processor;
+            return;
         }
 
-        internal IExternalScopeProvider? ScopeProvider { get; set; }
-
-        public IDisposable BeginScope<TState>(TState state) => ScopeProvider?.Push(state) ?? NullScope.Instance;
-
-        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState? state, Exception? exception, Func<TState?, Exception?, string> formatter)
+        if (formatter is null)
         {
-            if (!this.IsEnabled(logLevel))
+            throw new ArgumentNullException(nameof(formatter));
+        }
+
+        var message = formatter(state, exception);
+        if (message is null && exception is null)
+        {
+            return;
+        }
+
+        _stringBuilder ??= new StringBuilder();
+
+        // timestamp
+        var timestamp = DateTime.Now;
+        _stringBuilder.Append('[');
+        _stringBuilder.Append(timestamp.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
+        _stringBuilder.Append(']');
+
+        // log level
+        _stringBuilder.Append('[');
+        _stringBuilder.Append(logLevel switch
+        {
+            LogLevel.Trace => "trce",
+            LogLevel.Debug => "dbug",
+            LogLevel.Information => "info",
+            LogLevel.Warning => "warn",
+            LogLevel.Error => "fail",
+            LogLevel.Critical => "crit",
+            _ => throw new ArgumentOutOfRangeException(nameof(logLevel)),
+        });
+        _stringBuilder.Append(']');
+
+        // category
+        _stringBuilder.Append('[');
+        _stringBuilder.Append(_category);
+        _stringBuilder.Append('(');
+        _stringBuilder.Append(eventId.ToString());
+        _stringBuilder.Append(')');
+        _stringBuilder.Append(']');
+
+        // message
+        _stringBuilder.Append(' ');
+        _stringBuilder.Append(message ?? exception?.Message);
+
+        // scopes
+        ScopeProvider?.ForEachScope((scope, writer) =>
+        {
+            if (IsPropertyBag(scope, out var properties))
             {
-                return;
-            }
-
-            if (formatter is null)
-            {
-                throw new ArgumentNullException(nameof(formatter));
-            }
-
-            var message = formatter(state, exception);
-            if (message is null && exception is null)
-            {
-                return;
-            }
-
-            _stringBuilder ??= new StringBuilder();
-
-            // timestamp
-            var timestamp = DateTimeOffset.Now;
-            _stringBuilder.Append('[');
-            _stringBuilder.Append(timestamp.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
-            _stringBuilder.Append(']');
-
-            // log level
-            _stringBuilder.Append('[');
-            _stringBuilder.Append(logLevel switch
-            {
-                LogLevel.Trace => "trce",
-                LogLevel.Debug => "dbug",
-                LogLevel.Information => "info",
-                LogLevel.Warning => "warn",
-                LogLevel.Error => "fail",
-                LogLevel.Critical => "crit",
-                _ => throw new ArgumentOutOfRangeException(nameof(logLevel)),
-            });
-            _stringBuilder.Append(']');
-
-            // category
-            _stringBuilder.Append('[');
-            _stringBuilder.Append(_category);
-            _stringBuilder.Append('(');
-            _stringBuilder.Append(eventId.ToString());
-            _stringBuilder.Append(')');
-            _stringBuilder.Append(']');
-
-            // message
-            _stringBuilder.Append(' ');
-            _stringBuilder.Append(message ?? exception?.Message);
-
-            // scopes
-            ScopeProvider?.ForEachScope((scope, writer) =>
-            {
-                if (IsPropertyBag(scope, out var properties))
+                foreach (var property in properties)
                 {
-                    foreach (var property in properties)
+                    if (string.IsNullOrEmpty(property.Key))
                     {
-                        if (string.IsNullOrEmpty(property.Key))
-                        {
-                            continue;
-                        }
-
-                        writer.AppendLine();
-                        writer.Append(property.Key);
-                        writer.Append(':');
-                        writer.Append(property.Value?.ToString() ?? "null");
+                        continue;
                     }
-                }
-                else if (scope is not null)
-                {
+
                     writer.AppendLine();
-                    writer.Append(scope.ToString());
+                    writer.Append(property.Key);
+                    writer.Append(':');
+                    writer.Append(property.Value?.ToString() ?? "null");
                 }
-            }, _stringBuilder);
-
-            if (exception is not null)
-            {
-                _stringBuilder.AppendLine();
-                _stringBuilder.Append(exception.ToString());
             }
-
-            var formattedLogEvent = _stringBuilder.ToString();
-
-            _stringBuilder.Clear();
-            if (_stringBuilder.Capacity > 1024)
+            else if (scope is not null)
             {
-                _stringBuilder.Capacity = 1024;
+                writer.AppendLine();
+                writer.Append(scope.ToString());
             }
+        }, _stringBuilder);
 
-            _processor.Enqueue(formattedLogEvent);
+        if (exception is not null)
+        {
+            _stringBuilder.AppendLine();
+            _stringBuilder.Append(exception.ToString());
         }
 
-        private static bool IsPropertyBag(object scope, [NotNullWhen(true)] out IEnumerable<KeyValuePair<string, object?>>? properties)
+        var formattedLogEvent = _stringBuilder.ToString();
+
+        _stringBuilder.Clear();
+        if (_stringBuilder.Capacity > 1024)
         {
-            if (scope is IReadOnlyList<KeyValuePair<string, object?>> list && list.Count > 0)
+            _stringBuilder.Capacity = 1024;
+        }
+
+        _processor.Enqueue(timestamp, formattedLogEvent);
+    }
+
+    private static bool IsPropertyBag(object? scope, [NotNullWhen(true)] out IEnumerable<KeyValuePair<string, object?>>? properties)
+    {
+        if (scope is IReadOnlyList<KeyValuePair<string, object?>> list && list.Count > 0)
+        {
+            var item = list[list.Count - 1];
+            if (item.Key != "{OriginalFormat}")
             {
-                var item = list[list.Count - 1];
-                if (item.Key != "{OriginalFormat}")
-                {
-                    properties = list;
-                    return true;
-                }
-            }
-            else if (scope is IEnumerable<KeyValuePair<string, object?>> enumerable)
-            {
-                properties = enumerable;
+                properties = list;
                 return true;
             }
-
-            properties = null;
-            return false;
         }
+        else if (scope is IEnumerable<KeyValuePair<string, object?>> enumerable)
+        {
+            properties = enumerable;
+            return true;
+        }
+
+        properties = null;
+        return false;
     }
 }

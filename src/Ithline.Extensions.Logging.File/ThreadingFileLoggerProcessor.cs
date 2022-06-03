@@ -2,85 +2,84 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 
-namespace Ithline.Extensions.Logging.File
+namespace Ithline.Extensions.Logging.File;
+
+internal sealed class ThreadingFileLoggerProcessor : FileLoggerProcessor
 {
-    internal sealed class ThreadingFileLoggerProcessor : FileLoggerProcessor
+    private const int MaxQueuedMessages = 1024;
+    private readonly BlockingCollection<LogMessageEntry> _messageQueue;
+    private readonly Thread _outputThread;
+    private readonly LogFile _logFile;
+
+    public ThreadingFileLoggerProcessor(FileLoggerOptions options)
     {
-        private const int MaxQueuedMessages = 1024;
-        private readonly BlockingCollection<LogMessageEntry> _messageQueue;
-        private readonly Thread _outputThread;
-        private readonly LogFile _logFile;
+        _messageQueue = new BlockingCollection<LogMessageEntry>(MaxQueuedMessages);
 
-        public ThreadingFileLoggerProcessor(FileLoggerOptions options)
+        _logFile = LogFile.Create(
+            filePath: options.FilePath,
+            rollingInterval: options.RollingInterval,
+            retainFileCount: options.MaxRollingFiles);
+
+        _outputThread = new Thread(this.ProcessLogQueue)
         {
-            _messageQueue = new BlockingCollection<LogMessageEntry>(MaxQueuedMessages);
+            IsBackground = true,
+            Name = "File logger queue processing thread"
+        };
+        _outputThread.Start();
+    }
 
-            _logFile = LogFile.Create(
-                filePath: options.FilePath,
-                rollingInterval: options.RollingInterval,
-                retainFileCount: options.MaxRollingFiles);
-
-            _outputThread = new Thread(this.ProcessLogQueue)
-            {
-                IsBackground = true,
-                Name = "File logger queue processing thread"
-            };
-            _outputThread.Start();
+    public override void Enqueue(DateTime timestamp, string message)
+    {
+        if (_messageQueue.IsAddingCompleted)
+        {
+            return;
         }
 
-        public override void Enqueue(string message)
+        try
         {
-            if (_messageQueue.IsAddingCompleted)
-            {
-                return;
-            }
+            _messageQueue.Add(new LogMessageEntry(timestamp, message));
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
 
-            try
+    private void ProcessLogQueue()
+    {
+        try
+        {
+            foreach (var entry in _messageQueue.GetConsumingEnumerable())
             {
-                _messageQueue.Add(new LogMessageEntry(message));
-            }
-            catch (InvalidOperationException)
-            {
+                _logFile.WriteMessage(entry.Timestamp, entry.Message);
             }
         }
-
-        private void ProcessLogQueue()
+        catch
         {
             try
             {
-                foreach (var entry in _messageQueue.GetConsumingEnumerable())
-                {
-                    _logFile.WriteMessage(DateTime.Now, entry.Message);
-                }
+                _messageQueue.CompleteAdding();
             }
             catch
             {
-                try
-                {
-                    _messageQueue.CompleteAdding();
-                }
-                catch
-                {
-                }
             }
         }
+    }
 
-        protected override void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            if (disposing)
+            _messageQueue.CompleteAdding();
+            try
             {
-                _messageQueue.CompleteAdding();
-                try
-                {
-                    _outputThread.Join(1500);
-                }
-                catch (ThreadStateException)
-                {
-                }
-                _logFile.Dispose();
+                _outputThread.Join(1500);
             }
-
-            base.Dispose(disposing);
+            catch (ThreadStateException)
+            {
+            }
+            _logFile.Dispose();
         }
+
+        base.Dispose(disposing);
     }
 }
