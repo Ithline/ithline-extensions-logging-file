@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 
 namespace Ithline.Extensions.Logging.File;
 
@@ -10,5 +11,5 @@ internal sealed class TestFileLoggerProcessor : FileLoggerProcessor
 
     public List<string> Messages { get; } = new List<string>();
 
-    public override void Enqueue(System.DateTimeOffset timestamp, string message) => Messages.Add(message);
+    public override void Enqueue(DateTime timestamp, string message) => Messages.Add(message);
 }

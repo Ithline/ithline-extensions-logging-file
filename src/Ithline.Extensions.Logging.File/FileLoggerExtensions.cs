@@ -1,8 +1,9 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
+using Ithline.Extensions.Logging.File;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Configuration;
-using Ithline.Extensions.Logging.File;
 
 namespace Microsoft.Extensions.Logging;
 
@@ -15,8 +16,10 @@ public static class FileLoggerExtensions
     /// Adds a file logger named 'File' to the factory.
     /// </summary>
     /// <param name="builder">The <see cref="ILoggingBuilder"/> to use.</param>
+    /// <param name="configure">A delegate to configure the <see cref="FileLogger"/>.</param>
     /// <returns><paramref name="builder"/> for chaining.</returns>
-    public static ILoggingBuilder AddFile(this ILoggingBuilder builder)
+    [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "<Pending>")]
+    public static ILoggingBuilder AddFile(this ILoggingBuilder builder, Action<FileLoggerOptions>? configure = null)
     {
         if (builder is null)
         {
@@ -27,29 +30,10 @@ public static class FileLoggerExtensions
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, FileLoggerProvider>());
         LoggerProviderOptions.RegisterProviderOptions<FileLoggerOptions, FileLoggerProvider>(builder.Services);
 
-        return builder;
-    }
-
-    /// <summary>
-    /// Adds a file logger named 'File' to the factory.
-    /// </summary>
-    /// <param name="builder">The <see cref="ILoggingBuilder"/> to use.</param>
-    /// <param name="configure">A delegate to configure the <see cref="FileLogger"/>.</param>
-    /// <returns><paramref name="builder"/> for chaining.</returns>
-    public static ILoggingBuilder AddFile(this ILoggingBuilder builder, Action<FileLoggerOptions> configure)
-    {
-        if (builder is null)
+        if (configure is not null)
         {
-            throw new ArgumentNullException(nameof(builder));
+            builder.Services.Configure(configure);
         }
-
-        if (configure is null)
-        {
-            throw new ArgumentNullException(nameof(configure));
-        }
-
-        builder.AddFile();
-        builder.Services.Configure(configure);
 
         return builder;
     }
