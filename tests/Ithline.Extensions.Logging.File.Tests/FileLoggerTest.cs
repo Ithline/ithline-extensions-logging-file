@@ -54,7 +54,7 @@ public sealed class FileLoggerTest : IClassFixture<TempDirectory>
         // arrange
         var processor = new TestFileLoggerProcessor();
         var exception = new InvalidOperationException("Invalid operation.");
-        var logger = new FileLogger("NoMessage", processor);
+        var logger = new FileLogger("NoMessage", true, processor);
 
         // act
         logger.LogCritical(eventId: 1, message: null, exception: exception);

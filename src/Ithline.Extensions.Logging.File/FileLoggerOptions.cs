@@ -19,4 +19,9 @@ public sealed class FileLoggerOptions
     /// Gets or sets a number of files to retain. Zero or negative value will disable removal of old files. Default value is 31.
     /// </summary>
     public int MaxRollingFiles { get; set; } = 31;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether scopes should be included in the output.
+    /// </summary>
+    public bool IncludeScopes { get; set; } = true;
 }

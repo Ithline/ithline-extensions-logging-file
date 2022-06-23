@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -13,10 +11,12 @@ internal sealed class FileLogger : ILogger
     private static StringBuilder? _stringBuilder;
     private readonly FileLoggerProcessor _processor;
     private readonly string _category;
+    private readonly bool _includeScopes;
 
-    public FileLogger(string category, FileLoggerProcessor processor)
+    public FileLogger(string category, bool includeScopes, FileLoggerProcessor processor)
     {
         _category = category;
+        _includeScopes = includeScopes;
         _processor = processor;
     }
 
@@ -79,29 +79,15 @@ internal sealed class FileLogger : ILogger
         _stringBuilder.Append(message ?? exception?.Message);
 
         // scopes
-        ScopeProvider?.ForEachScope((scope, writer) =>
+        if (_includeScopes)
         {
-            if (IsPropertyBag(scope, out var properties))
-            {
-                foreach (var property in properties)
-                {
-                    if (string.IsNullOrEmpty(property.Key))
-                    {
-                        continue;
-                    }
-
-                    writer.AppendLine();
-                    writer.Append(property.Key);
-                    writer.Append(':');
-                    writer.Append(property.Value?.ToString() ?? "null");
-                }
-            }
-            else if (scope is not null)
+            ScopeProvider?.ForEachScope((scope, writer) =>
             {
                 writer.AppendLine();
-                writer.Append(scope.ToString());
-            }
-        }, _stringBuilder);
+                writer.Append("=> ");
+                writer.Append(scope);
+            }, _stringBuilder);
+        }
 
         if (exception is not null)
         {
@@ -118,26 +104,5 @@ internal sealed class FileLogger : ILogger
         }
 
         _processor.Enqueue(timestamp, formattedLogEvent);
-    }
-
-    private static bool IsPropertyBag(object? scope, [NotNullWhen(true)] out IEnumerable<KeyValuePair<string, object?>>? properties)
-    {
-        if (scope is IReadOnlyList<KeyValuePair<string, object?>> list && list.Count > 0)
-        {
-            var item = list[list.Count - 1];
-            if (item.Key != "{OriginalFormat}")
-            {
-                properties = list;
-                return true;
-            }
-        }
-        else if (scope is IEnumerable<KeyValuePair<string, object?>> enumerable)
-        {
-            properties = enumerable;
-            return true;
-        }
-
-        properties = null;
-        return false;
     }
 }

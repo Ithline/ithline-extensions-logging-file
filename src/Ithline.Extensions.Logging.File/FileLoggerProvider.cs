@@ -13,6 +13,7 @@ public sealed class FileLoggerProvider : ILoggerProvider, ISupportExternalScope
 {
     private readonly ConcurrentDictionary<string, FileLogger> _loggers;
     private readonly ThreadingFileLoggerProcessor _processor;
+    private readonly bool _includeScopes;
     private IExternalScopeProvider? _scopeProvider;
 
     /// <summary>
@@ -33,6 +34,7 @@ public sealed class FileLoggerProvider : ILoggerProvider, ISupportExternalScope
             throw new ArgumentException("File name must be specified.", nameof(options));
         }
 
+        _includeScopes = options.Value.IncludeScopes;
         _loggers = new ConcurrentDictionary<string, FileLogger>();
         _processor = new ThreadingFileLoggerProcessor(options.Value);
     }
@@ -40,13 +42,13 @@ public sealed class FileLoggerProvider : ILoggerProvider, ISupportExternalScope
     /// <inheritdoc/>
     public ILogger CreateLogger(string categoryName)
     {
-        return _loggers.GetOrAdd(categoryName, category =>
+        return _loggers.GetOrAdd(categoryName, (category, ctx) =>
         {
-            return new FileLogger(category, _processor)
+            return new FileLogger(category, ctx._includeScopes, ctx._processor)
             {
-                ScopeProvider = _scopeProvider,
+                ScopeProvider = ctx._scopeProvider,
             };
-        });
+        }, this);
     }
 
     /// <inheritdoc/>
